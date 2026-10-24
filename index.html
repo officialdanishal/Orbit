@@ -130,8 +130,26 @@ window.orbitFirebaseCreateAccount=async function(){
   if(!name||!email||!password){showToast('Fill in your name, email, and password.');return}
   if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){showToast('Enter a valid email address.');return}
   if(password.length<8){showToast('Password must be at least 8 characters.');return}
-  try{const cred=await createUserWithEmailAndPassword(orbitAuth,email,password);await sendEmailVerification(cred.user);await setDoc(doc(orbitDb,'users',cred.user.uid),{uid:cred.user.uid,displayName:name,email,username:email.split('@')[0],emailVerified:false,createdAt:serverTimestamp()});await signOut(orbitAuth);showToast('Verification email sent! Verify your email, then log in.');showStart();document.getElementById('loginid').value=email;}
-  catch(e){showToast(friendly(e))}
+  let cred=null;
+  try{
+    cred=await createUserWithEmailAndPassword(orbitAuth,email,password);
+    // Save the user profile first, so a verification-email delivery problem does not
+    // leave a newly-created account without its Firestore profile.
+    await setDoc(doc(orbitDb,'users',cred.user.uid),{uid:cred.user.uid,displayName:name,email,username:email.split('@')[0],emailVerified:false,createdAt:serverTimestamp()});
+    try{
+      await sendEmailVerification(cred.user);
+      showToast('Account created. Verification email requested—check your inbox and spam.');
+    }catch(emailError){
+      console.error('Orbit verification email request failed:',emailError);
+      showToast('Account created, but Firebase could not send verification email. Log in and use Resend Verification Email.');
+    }
+    await signOut(orbitAuth);
+    showStart();
+    document.getElementById('loginid').value=email;
+  }catch(e){
+    console.error('Orbit account creation failed:',e);
+    showToast(friendly(e));
+  }
 };
 window.orbitFirebaseSignIn=async function(){
   const resendBtn=document.getElementById('resendVerifyBtn'); if(resendBtn)resendBtn.classList.add('hidden');
